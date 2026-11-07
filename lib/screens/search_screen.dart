@@ -18,6 +18,7 @@ import '../mixins/mounted_set_state_mixin.dart';
 import '../mixins/refreshable.dart';
 import '../providers/hidden_libraries_provider.dart';
 import '../providers/libraries_provider.dart';
+import '../services/hidden_library_search_scope.dart';
 import '../providers/multi_server_provider.dart';
 import '../services/data_aggregation_service.dart';
 import '../services/settings_service.dart';
@@ -131,6 +132,7 @@ class _SearchScreenState extends State<SearchScreen>
     // start would filter nothing. Read before any await: the profile subtree
     // can be torn down mid-search.
     final hiddenLibraries = context.read<HiddenLibrariesProvider>();
+    final libraries = context.read<LibrariesProvider>();
     await hiddenLibraries.ensureInitialized();
     if (!mounted) return const [];
 
@@ -140,6 +142,8 @@ class _SearchScreenState extends State<SearchScreen>
       final result = await multiServerProvider.aggregationService.searchAcrossServers(
         query,
         hiddenLibraryKeys: hiddenLibraries.hiddenLibraryKeys,
+        // Local patch: see HiddenLibrarySearchScope.
+        hiddenScope: HiddenLibrarySearchScope.from(libraries.libraries, hiddenLibraries.hiddenLibraryKeys),
         abort: abort,
       );
       abort.throwIfAborted();

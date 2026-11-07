@@ -17,6 +17,7 @@ import '../utils/global_key_utils.dart';
 import '../utils/search_relevance.dart';
 import '../utils/media_server_http_client.dart';
 import '../utils/media_server_timeouts.dart';
+import 'hidden_library_search_scope.dart';
 import 'local_playback_history.dart';
 import 'multi_server_manager.dart';
 
@@ -832,12 +833,21 @@ class DataAggregationService {
     String query, {
     int? limit,
     Set<String>? hiddenLibraryKeys,
+    HiddenLibrarySearchScope? hiddenScope,
     AbortController? abort,
   }) async {
     if (query.trim().isEmpty) return _emptySearchResult;
 
     abort?.throwIfAborted();
-    final clients = _serverManager.visibleOnlineClients;
+    // Local patch: servers whose every library is hidden are not searched.
+    final skippedServerIds = hiddenScope?.fullyHiddenServerIds ?? const <String>{};
+    final clients = {
+      for (final entry in _serverManager.visibleOnlineClients.entries)
+        if (!skippedServerIds.contains(entry.key)) entry.key: entry.value,
+    };
+    if (skippedServerIds.isNotEmpty) {
+      appLogger.i('Search: skipping ${skippedServerIds.length} servers whose libraries are all hidden');
+    }
     if (clients.isEmpty) return _emptySearchResult;
 
     final resultLimit = limit ?? defaultMediaSearchLimit;
@@ -889,7 +899,23 @@ class DataAggregationService {
     }
     // Before ranking, so hidden results cannot spend the `resultLimit` budget
     // and silently shrink what the user sees.
-    final visible = _withoutHiddenLibraries(titles, hiddenLibraryKeys);
+    final byLibrary = _withoutHiddenLibraries(titles, hiddenLibraryKeys);
+    // Local patch: rows the server returned without a library are matched
+    // against the profile's visible library kinds instead of always kept.
+    final visible = hiddenScope == null
+        ? byLibrary
+        : [
+            for (final item in byLibrary)
+              if (item.libraryGlobalKey != null || hiddenScope.keepsUnattributed(item)) item,
+          ];
+    if (hiddenScope != null) {
+      final unattributed = byLibrary.where((item) => item.libraryGlobalKey == null).length;
+      appLogger.i(
+        'Search hidden-library filter: ${titles.length - byLibrary.length} dropped by library, '
+        '${byLibrary.length - visible.length} unattributed dropped by kind, '
+        '${unattributed - (byLibrary.length - visible.length)} unattributed kept',
+      );
+    }
     // Titles first: equal scores keep input order, so a tie goes to the title.
     final hits = rankSearchHits(
       [for (final item in visible) MediaSearchHit(item), for (final person in people) PersonSearchHit(person)],

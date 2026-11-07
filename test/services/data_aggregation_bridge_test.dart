@@ -23,6 +23,7 @@ import 'package:plezy/models/catalog/catalog_item.dart';
 import 'package:plezy/providers/multi_server_provider.dart';
 import 'package:plezy/services/catalog/catalog_library_matcher.dart';
 import 'package:plezy/services/data_aggregation_service.dart';
+import 'package:plezy/services/hidden_library_search_scope.dart';
 import 'package:plezy/services/jellyfin_client.dart';
 import 'package:plezy/services/jellyfin_api_cache.dart';
 import 'package:plezy/services/multi_server_manager.dart';
@@ -833,6 +834,99 @@ void main() {
       // and needs the same scoping.
       expect(alpha.lastPeopleExcludedLibraryIds, {'1', '9'});
       expect(beta.lastPeopleExcludedLibraryIds, {'1'});
+    });
+
+    // Local patch: HiddenLibrarySearchScope.
+    test('servers whose libraries are all hidden are not searched', () async {
+      final hiddenServer = _LibrariesClient(
+        ServerId('friend'),
+        searchResults: [
+          testMediaItem(
+            id: 'f-1',
+            backend: MediaBackend.plex,
+            kind: MediaKind.album,
+            title: 'Target',
+            serverId: 'friend',
+          ),
+        ],
+      );
+      final keptServer = _LibrariesClient(
+        ServerId('tower'),
+        searchResults: [
+          testMediaItem(
+            id: 't-1',
+            backend: MediaBackend.plex,
+            kind: MediaKind.movie,
+            title: 'Target',
+            serverId: 'tower',
+            libraryId: '1',
+          ),
+        ],
+      );
+      manager.debugRegisterClientForTesting(hiddenServer);
+      manager.debugRegisterClientForTesting(keptServer);
+      final hidden = {'friend:1', 'friend:2'};
+      final scope = HiddenLibrarySearchScope.from([
+        MediaLibrary(
+          id: '1',
+          backend: MediaBackend.plex,
+          title: 'Music',
+          kind: MediaKind.artist,
+          serverId: ServerId('friend'),
+        ),
+        MediaLibrary(
+          id: '2',
+          backend: MediaBackend.plex,
+          title: 'Movies',
+          kind: MediaKind.movie,
+          serverId: ServerId('friend'),
+        ),
+        MediaLibrary(
+          id: '1',
+          backend: MediaBackend.plex,
+          title: 'Movies',
+          kind: MediaKind.movie,
+          serverId: ServerId('tower'),
+        ),
+      ], hidden);
+
+      final result = await service.searchAcrossServers('Target', hiddenLibraryKeys: hidden, hiddenScope: scope);
+
+      expect(_hitIds(result), ['t-1']);
+      expect(hiddenServer.lastExcludedLibraryIds, isNull, reason: 'the fully hidden server is never queried');
+      expect(result.succeededServerIds, {'tower'});
+    });
+
+    test('unattributed rows of a fully hidden kind are dropped', () async {
+      MediaItem row(String id, MediaKind kind) =>
+          testMediaItem(id: id, backend: MediaBackend.plex, kind: kind, title: 'Target', serverId: 'tower');
+      manager.debugRegisterClientForTesting(
+        _LibrariesClient(
+          ServerId('tower'),
+          searchResults: [row('album', MediaKind.album), row('track', MediaKind.track), row('movie', MediaKind.movie)],
+        ),
+      );
+      final hidden = {'tower:9'};
+      final scope = HiddenLibrarySearchScope.from([
+        MediaLibrary(
+          id: '1',
+          backend: MediaBackend.plex,
+          title: 'Movies',
+          kind: MediaKind.movie,
+          serverId: ServerId('tower'),
+        ),
+        MediaLibrary(
+          id: '9',
+          backend: MediaBackend.plex,
+          title: 'Music',
+          kind: MediaKind.artist,
+          serverId: ServerId('tower'),
+        ),
+      ], hidden);
+
+      final result = await service.searchAcrossServers('Target', hiddenLibraryKeys: hidden, hiddenScope: scope);
+
+      expect(_hitIds(result), ['movie']);
     });
 
     test('a failed or cancelled people search keeps that server\'s titles and success', () async {
