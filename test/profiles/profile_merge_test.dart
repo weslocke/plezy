@@ -134,4 +134,48 @@ void main() {
       expect(profiles.last.lastUsedAt, DateTime(2026, 1, 3));
     });
   });
+
+  group('hidePlexHomeProfilesGuardedByLocalPin', () {
+    final homeId = plexHomeProfileId(accountConnectionId: 'plex-1', homeUserUuid: 'home-1');
+    final otherHomeId = plexHomeProfileId(accountConnectionId: 'plex-1', homeUserUuid: 'home-2');
+
+    List<Profile> merged({String? pinHash}) => mergeLocalWithPlexHome(
+      locals: [
+        Profile.local(id: 'locked', displayName: 'Locked', pinHash: pinHash, createdAt: DateTime(2026, 1, 1)),
+        Profile.local(id: 'open', displayName: 'Open', createdAt: DateTime(2026, 1, 2)),
+      ],
+      plexHomeByConnectionId: {
+        'plex-1': [_homeUser('home-1', 'Shared'), _homeUser('home-2', 'Other')],
+      },
+      connectionsById: {'plex-1': _account('plex-1')},
+    );
+
+    const lockedRow = ProfileConnection(profileId: 'locked', connectionId: 'plex-1', userIdentifier: 'home-1');
+
+    test('hides the Plex Home user attached to a PIN-protected local profile', () {
+      final visible = hidePlexHomeProfilesGuardedByLocalPin(merged(pinHash: computePinHash('1234')), [lockedRow]);
+
+      expect(visible.map((p) => p.id).toList(), ['locked', 'open', otherHomeId]);
+    });
+
+    test('keeps the Plex Home user when the local profile has no PIN', () {
+      final visible = hidePlexHomeProfilesGuardedByLocalPin(merged(), [lockedRow]);
+
+      expect(visible.map((p) => p.id), contains(homeId));
+    });
+
+    test('keeps it when only an unprotected profile uses it', () {
+      const openRow = ProfileConnection(profileId: 'open', connectionId: 'plex-1', userIdentifier: 'home-1');
+      final visible = hidePlexHomeProfilesGuardedByLocalPin(merged(pinHash: computePinHash('1234')), [openRow]);
+
+      expect(visible.map((p) => p.id), contains(homeId));
+    });
+
+    test('ignores the Plex Home profile own token cache row', () {
+      final row = ProfileConnection(profileId: homeId, connectionId: 'plex-1', userIdentifier: 'home-1');
+      final visible = hidePlexHomeProfilesGuardedByLocalPin(merged(pinHash: computePinHash('1234')), [row]);
+
+      expect(visible.map((p) => p.id), contains(homeId));
+    });
+  });
 }

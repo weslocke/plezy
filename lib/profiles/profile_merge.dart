@@ -55,6 +55,33 @@ List<Profile> mergeLocalWithPlexHome({
   return sortProfilesByLastUsed(out);
 }
 
+/// Local patch (not upstream): drop virtual Plex Home profiles whose Home user
+/// is attached to a PIN-protected local profile.
+///
+/// Every Home user of a signed-in Plex account surfaces as its own profile,
+/// gated only by Plex's own PIN. An account that merely has servers shared to
+/// it has no Plex Home and so cannot set one, which would leave the account
+/// reachable without the PIN of the local profile that was meant to guard it.
+/// Hiding the virtual profile leaves the PIN-protected local profile as the
+/// only way in, both in the picker and as a borrow source.
+List<Profile> hidePlexHomeProfilesGuardedByLocalPin(List<Profile> profiles, Iterable<ProfileConnection> connections) {
+  final pinProtectedLocalIds = {
+    for (final p in profiles)
+      if (p.isLocal && p.isPinProtected) p.id,
+  };
+  if (pinProtectedLocalIds.isEmpty) return profiles;
+  final guarded = {
+    for (final pc in connections)
+      if (pinProtectedLocalIds.contains(pc.profileId) && pc.userIdentifier.isNotEmpty)
+        '${pc.connectionId}/${pc.userIdentifier}',
+  };
+  if (guarded.isEmpty) return profiles;
+  return [
+    for (final p in profiles)
+      if (!(p.isPlexHome && guarded.contains('${p.parentConnectionId}/${p.plexHomeUserUuid}'))) p,
+  ];
+}
+
 List<Profile> sortProfilesByLastUsed(List<Profile> profiles) {
   final indexed = profiles.indexed.toList();
   indexed.sort((a, b) {

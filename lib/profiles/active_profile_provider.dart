@@ -300,11 +300,14 @@ class ActiveProfileProvider extends ChangeNotifier with DisposableChangeNotifier
   }
 
   void _recomputeProfiles() {
-    _profiles = mergeLocalWithPlexHome(
-      locals: _localProfiles,
-      plexHomeByConnectionId: _plexHomeUsers,
-      connectionsById: _connectionsById,
-      storage: _storage,
+    _profiles = hidePlexHomeProfilesGuardedByLocalPin(
+      mergeLocalWithPlexHome(
+        locals: _localProfiles,
+        plexHomeByConnectionId: _plexHomeUsers,
+        connectionsById: _connectionsById,
+        storage: _storage,
+      ),
+      _connectionsByProfile.values.expand((rows) => rows),
     );
     _avatarUrls = resolveProfileAvatarUrls(
       profiles: _profiles,
