@@ -96,11 +96,16 @@ class _BorrowConnectionScreenState extends State<BorrowConnectionScreen> {
     final localProfiles = results[2] as List<Profile>;
     final storage = results[3] as StorageService;
     final connById = {for (final c in allConns) c.id: c};
-    final allProfiles = mergeLocalWithPlexHome(
-      locals: localProfiles,
-      plexHomeByConnectionId: plexHome.current,
-      connectionsById: connById,
-      storage: storage,
+    // Hidden Plex Home profiles must not be offered as a PIN-free borrow
+    // source; pass 2 below still offers the PIN-protected local profile.
+    final allProfiles = hidePlexHomeProfilesGuardedByLocalPin(
+      mergeLocalWithPlexHome(
+        locals: localProfiles,
+        plexHomeByConnectionId: plexHome.current,
+        connectionsById: connById,
+        storage: storage,
+      ),
+      allPcs,
     );
 
     // What does the target already have? Skip duplicates by connection id.
