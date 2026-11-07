@@ -25,6 +25,7 @@ import '../../services/download_storage_service.dart';
 import '../../services/file_picker_service.dart';
 import '../../services/saf_storage_service.dart';
 import '../../services/settings_export_service.dart';
+import 'server_toggle_screen.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/seerr_account_provider.dart';
 import '../../services/account_preferences_accounts.dart';
@@ -371,6 +372,14 @@ class _SettingsScreenState extends State<SettingsScreen> with FocusableTab, Moun
           },
         ),
         _buildProfilesTile(context),
+        // Local patch: per-profile server switches (ServerToggleScreen).
+        if (context.select<ActiveProfileProvider, int>((p) => serversForActiveProfile(p).length) > 1)
+          SettingNavigationTile(
+            icon: Symbols.dns_rounded,
+            title: 'Servers',
+            subtitle: 'Turn off servers this profile doesn\'t use',
+            destinationBuilder: (_) => const ServerToggleScreen(),
+          ),
         if (context.select<AccountPreferencesController, bool>((c) => c.accounts.isNotEmpty))
           _buildAccountPreferencesTile(context),
       ],

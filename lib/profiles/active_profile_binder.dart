@@ -15,6 +15,7 @@ import 'plex_home_switch.dart';
 import 'profile.dart';
 import 'profile_connection.dart';
 import 'profile_connection_registry.dart';
+import 'server_disable.dart';
 
 /// Callback invoked when a Plex Home user PIN is required mid-activation.
 /// Returns the entered PIN, or `null` to abort. The implementation
@@ -348,11 +349,15 @@ class ActiveProfileBinder {
       final allowPinPrompt = userInitiated || (!_hasBoundOnce && _initialBindMayPromptPin);
       _initialBindMayPromptPin = true;
 
+      // Local patch: servers this profile turned off are never expected.
+      final disabledServers = await disabledServerIdsFor(profile.id);
+      if (!_isCurrentBind(profile.id, generation)) return false;
       final expectedServerIds = _expectedServerIdsForProfile(
         profile,
         joinRows: joinRows,
         connectionsById: connectionsById,
       );
+      expectedServerIds.removeAll(effectiveDisabledServerIds(expectedServerIds, disabledServers));
       multiServerProvider.setExpectedVisibleServerIds(expectedServerIds);
       final localProfileHasJoinRows = profile.isLocal && joinRows.isNotEmpty;
 
@@ -388,16 +393,16 @@ class ActiveProfileBinder {
       // servers plex.tv no longer lists must not stay expected (and so
       // registered) just because the persisted snapshot still has them.
       // Connections whose refresh failed keep their cached membership.
+      final refreshedExpected = _expectedServerIdsForProfile(
+        profile,
+        joinRows: joinRows,
+        connectionsById: connectionsById,
+        discoveredMembership: discoveredMembership,
+      );
       expectedServerIds
         ..clear()
-        ..addAll(
-          _expectedServerIdsForProfile(
-            profile,
-            joinRows: joinRows,
-            connectionsById: connectionsById,
-            discoveredMembership: discoveredMembership,
-          ),
-        );
+        ..addAll(refreshedExpected)
+        ..removeAll(effectiveDisabledServerIds(refreshedExpected, disabledServers));
       for (final result in results) {
         visibleServerIds.addAll(result.visibleServerIds);
         expectedServerIds.addAll(result.expectedServerIds);
@@ -775,7 +780,11 @@ class ActiveProfileBinder {
           profileLabel: profileLabel,
         );
         if (!_isCurrentBind(profileId, generation)) return const _ProfileBindResult.empty();
-        final cachedServerIds = account.servers.map((server) => server.clientIdentifier).toSet();
+        // Local patch: compare against the servers this profile has turned on.
+        final cachedServerIds = withoutDisabledServers(
+          account.servers,
+          await disabledServerIdsFor(profileId),
+        ).map((server) => server.clientIdentifier).toSet();
         if (optimistic != null && setEquals(optimistic.visibleServerIds, cachedServerIds)) {
           _reconcileWhenFetchLands(
             fetchOutcome: fetchOutcome,
@@ -943,6 +952,14 @@ class ActiveProfileBinder {
     if (servers.isEmpty) {
       appLogger.w('ActiveProfileBinder: no servers for $profileLabel on ${account.accountLabel}');
       return const _ProfileBindResult.empty();
+    }
+    // Local patch: servers this profile turned off are never contacted.
+    final enabled = withoutDisabledServers(servers, await disabledServerIdsFor(profileId));
+    if (enabled.length != servers.length) {
+      appLogger.i(
+        'ActiveProfileBinder: skipping ${servers.length - enabled.length} turned-off Plex servers for $profileLabel',
+      );
+      servers = enabled;
     }
     final stopwatch = Stopwatch()..start();
     final updatedConn = account.copyWith(servers: servers);
@@ -1185,7 +1202,10 @@ class ActiveProfileBinder {
     // offline. Newly-online expected servers are promoted into the visibility
     // filter by MultiServerProvider when the status emission this triggers
     // lands.
-    await serverManager.refreshTokensForProfile(account.copyWith(servers: fresh), profileId: profileId);
+    await serverManager.refreshTokensForProfile(
+      account.copyWith(servers: withoutDisabledServers(fresh, await disabledServerIdsFor(profileId))),
+      profileId: profileId,
+    );
   }
 
   Future<_ProfileBindResult> _bindMediaBrowser(

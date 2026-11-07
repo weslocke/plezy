@@ -16,6 +16,7 @@ import 'package:plezy/profiles/active_profile_provider.dart';
 import 'package:plezy/profiles/plex_home_service.dart';
 import 'package:plezy/profiles/profile.dart';
 import 'package:plezy/profiles/profile_connection.dart';
+import 'package:plezy/profiles/server_disable.dart';
 import 'package:plezy/profiles/profile_connection_registry.dart';
 import 'package:plezy/profiles/profile_registry.dart';
 import 'package:plezy/providers/multi_server_provider.dart';
@@ -470,6 +471,104 @@ void main() {
       await binder.rebindActive();
       expect(multiServerProvider.expectedServerIds, ['srv-2']);
       expect(manager.registeredServerIds, ['srv-2']);
+    });
+  });
+
+  // Local patch: per-profile turned-off servers (server_disable.dart).
+  group('turned-off servers', () {
+    late _ControlledConnectManager controlled;
+
+    Future<Profile> setUpTwoServerAccount() async {
+      PackageInfo.setMockInitialValues(
+        appName: 'Plezy',
+        packageName: 'com.example.plezy',
+        version: '1.0.0',
+        buildNumber: '1',
+        buildSignature: '',
+      );
+      DeviceIdentityService.debugOverride(const DeviceIdentity(platform: 'Test'));
+      addTearDown(() => DeviceIdentityService.debugOverride(null));
+      PlexApiCache.initialize(db);
+      binder.dispose();
+      multiServerProvider.dispose();
+      controlled = _ControlledConnectManager()..reachable = true;
+      manager = controlled;
+      multiServerProvider = testMultiServerProvider(manager);
+      binder = ActiveProfileBinder(
+        activeProfile: activeProfile,
+        connections: connections,
+        profileConnections: profileConnections,
+        serverManager: manager,
+        multiServerProvider: multiServerProvider,
+        pinPrompt: (_, {String? errorMessage}) async => null,
+        shouldDeferInitialBind: (_) async => false,
+        plexAuth: PlexAuthService.forTesting(
+          http: MediaServerHttpClient(
+            client: MockClient(
+              (request) async => http.Response(
+                jsonEncode([
+                  _serverJson(clientIdentifier: 'srv-1', accessToken: 'server-token-a'),
+                  _serverJson(clientIdentifier: 'srv-2', accessToken: 'server-token-a'),
+                ]),
+                200,
+                headers: {'content-type': 'application/json'},
+              ),
+            ),
+          ),
+        ),
+      );
+      final account = PlexAccountConnection(
+        id: 'plex.account',
+        accountToken: 'account-token',
+        clientIdentifier: 'client-id',
+        accountLabel: 'Owner',
+        servers: [_server(accessToken: 'account-server-token')],
+        createdAt: DateTime(2026, 1, 1),
+      );
+      await connections.upsert(account);
+      final profile = await createActiveLocalProfile('local-a');
+      await profileConnections.upsert(
+        ProfileConnection(
+          profileId: profile.id,
+          connectionId: account.id,
+          userToken: 'token-a',
+          userIdentifier: 'uuid-a',
+          tokenAcquiredAt: DateTime(2026, 1, 1),
+        ),
+      );
+      return profile;
+    }
+
+    test('a turned-off server is neither expected nor connected', () async {
+      final profile = await setUpTwoServerAccount();
+      await setServerDisabled(profile.id, 'srv-2', disabled: true);
+
+      await binder.rebindActive();
+
+      expect(multiServerProvider.expectedServerIds, ['srv-1']);
+      expect(manager.registeredServerIds, ['srv-1']);
+    });
+
+    test('turning a server back on connects it on the next bind', () async {
+      final profile = await setUpTwoServerAccount();
+      await setServerDisabled(profile.id, 'srv-2', disabled: true);
+      await binder.rebindActive();
+
+      await setServerDisabled(profile.id, 'srv-2', disabled: false);
+      await binder.rebindActive();
+
+      expect(multiServerProvider.expectedServerIds, unorderedEquals(['srv-1', 'srv-2']));
+      expect(manager.registeredServerIds, unorderedEquals(['srv-1', 'srv-2']));
+    });
+
+    test('turning off every server is ignored so the profile still binds', () async {
+      final profile = await setUpTwoServerAccount();
+      await setServerDisabled(profile.id, 'srv-1', disabled: true);
+      await setServerDisabled(profile.id, 'srv-2', disabled: true);
+
+      await binder.rebindActive();
+
+      expect(manager.registeredServerIds, unorderedEquals(['srv-1', 'srv-2']));
     });
   });
 
