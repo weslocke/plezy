@@ -38,6 +38,8 @@ import '../profiles/active_profile_binder.dart';
 import '../connection/connection_registry.dart';
 import '../profiles/active_profile_provider.dart';
 import '../profiles/plex_home_service.dart';
+import '../profiles/profile_activation.dart';
+import '../profiles/profile_auto_lock.dart';
 import '../profiles/profile_selection_policy.dart';
 import '../providers/catalog_sources_provider.dart';
 import '../providers/account_preferences_controller.dart';
@@ -457,6 +459,10 @@ class _MainScreenState extends State<MainScreen>
   /// Latches a genuine backgrounding and, on resume, reports whether the app
   /// was gone long enough that the content tabs should refetch (#2043).
   final _contentRefreshResumeGate = ContentRefreshResumeGate();
+
+  /// Local patch (auto-lock): latches a backgrounding and, on resume, reports
+  /// whether a PIN-protected profile has been left long enough to lock.
+  final _autoLockResumeGate = ProfileAutoLockResumeGate(persist: persistAutoLockBackgroundedAt);
 
   late List<Widget> _screens;
 
@@ -1140,6 +1146,10 @@ class _MainScreenState extends State<MainScreen>
       sessionContinuesInPip: VideoPlayerScreenState.activeSessionContinuesInPip,
     );
     final refreshStaleContent = _contentRefreshResumeGate.consumeRefreshOn(state);
+    final autoLockDue = _autoLockResumeGate.consumeLockOn(
+      state,
+      pipContinuation: VideoPlayerScreenState.activeSessionContinuesInPip,
+    );
     // Seerr authority is independent of media-server reachability and stale
     // content. A grant must recover hidden Request actions on any real resume.
     if (resumedFromBackground && mounted) {
@@ -1159,7 +1169,36 @@ class _MainScreenState extends State<MainScreen>
     )) {
       _showProfileSelectionOnResume();
     }
+    if (autoLockDue && mounted) {
+      unawaited(
+        _autoLockOnResume(hasActiveCompanionRemoteSession: context.read<CompanionRemoteProvider>().isInSession),
+      );
+    }
     if (refreshStaleContent) _refreshContentAfterStaleResume();
+  }
+
+  /// Local patch (auto-lock): after [profileAutoLockGrace] away, a
+  /// PIN-protected profile drops to the most recently used unprotected one.
+  /// The switch replaces this profile session, closing any player left paused
+  /// on the protected profile. If the switch fails, the picker is shown so the
+  /// protected profile is never left open without its PIN.
+  Future<void> _autoLockOnResume({required bool hasActiveCompanionRemoteSession}) async {
+    if (hasActiveCompanionRemoteSession) return;
+    final settingsService = await SettingsService.getInstance();
+    if (!mounted || _isShowingProfileSelection) return;
+    final activeProvider = context.read<ActiveProfileProvider>();
+    // The "ask on open" picker already gates a protected profile behind its PIN.
+    if (activeProvider.requiresSelectionOnOpen(settingsService)) return;
+    if (DeepLinkService.instance.selectsProfile) return;
+    final fallback = autoLockFallbackProfile(activeProvider.profiles, activeProvider.active);
+    if (fallback == null) return;
+
+    appLogger.i('Auto-lock: switching from ${activeProvider.active?.displayName} to ${fallback.displayName}');
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final switched = await switchProfileFromUi(context, fallback);
+    if (switched || !(activeProvider.active?.isPinProtected ?? false)) return;
+    appLogger.w('Auto-lock: switch failed; showing the profile picker');
+    await rootNavigator.push(MaterialPageRoute(builder: (_) => const ProfileSwitchScreen(requireSelection: true)));
   }
 
   /// Refetch the content tabs after the app resumes from a long backgrounding.

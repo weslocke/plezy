@@ -26,6 +26,7 @@ import 'profiles/profile_connection_cleanup.dart';
 import 'profiles/profile_connection_registry.dart';
 import 'profiles/profile_registry.dart';
 import 'profiles/profile_activation.dart';
+import 'profiles/profile_auto_lock.dart';
 import 'profiles/profile_selection_policy.dart';
 import 'models/external_player_models.dart';
 import 'mixins/mounted_set_state_mixin.dart';
@@ -1812,7 +1813,10 @@ class _MainAppState extends State<MainApp> with WidgetsBindingObserver {
                 final linkProfileId = DeepLinkService.instance.startupProfileId;
                 if (linkProfileId != null) return profile.id != linkProfileId;
                 final settings = await SettingsService.getInstance();
-                return activeProfile.requiresSelectionOnOpen(settings);
+                if (activeProfile.requiresSelectionOnOpen(settings)) return true;
+                // Local patch (auto-lock): a protected profile left for longer
+                // than the grace period is replaced by SetupScreen's switch.
+                return await _startupAutoLockProfile(activeProfile) != null;
               },
             );
           },
@@ -2348,6 +2352,16 @@ class _SetupScreenState extends State<SetupScreen> with MountedSetStateMixin {
     final linkProfile = deepLinks.claimStartupProfile(activeProfile.profiles);
     final linkSwitches = linkProfile != null && linkProfile.id != activeProfile.activeId;
     var linkApplied = linkProfile != null && !linkSwitches;
+    // Local patch (auto-lock): a protected profile left for longer than the
+    // grace period opens as the most recently used unprotected profile. The
+    // binder deferred the protected profile's bind (`shouldDeferInitialBind`).
+    final startupSettings = await SettingsService.getInstance();
+    if (!mounted) return;
+    final autoLockProfile = linkProfile == null && !activeProfile.requiresSelectionOnOpen(startupSettings)
+        ? await _startupAutoLockProfile(activeProfile)
+        : null;
+    if (!mounted) return;
+    var autoLocked = false;
     try {
       // Start only after the active profile snapshot is hydrated. Without a
       // network the initial bind stays PIN-free: plex.tv cannot verify a PIN,
@@ -2361,6 +2375,13 @@ class _SetupScreenState extends State<SetupScreen> with MountedSetStateMixin {
         if (!mounted) return;
       }
 
+      if (autoLockProfile != null) {
+        appLogger.i('Auto-lock: opening ${autoLockProfile.displayName} instead of a protected profile');
+        autoLocked = await switchProfileFromUi(context, autoLockProfile);
+        if (!mounted) return;
+      }
+      unawaited(StorageService.getInstance().then(clearAutoLockBackgroundedAt));
+
       // If "prompt for profile on launch" is on (or no profile is selected
       // yet), surface the picker BEFORE waiting for the previously-active
       // profile's bind to settle — otherwise the user sees the splash fully
@@ -2370,8 +2391,12 @@ class _SetupScreenState extends State<SetupScreen> with MountedSetStateMixin {
       final settings = await SettingsService.getInstance();
       if (!mounted) return;
       final hasNoActive = activeProfile.active == null && activeProfile.profiles.isNotEmpty;
+      // A failed auto-lock switch leaves the protected profile unbound, so it
+      // falls back to the picker, which asks for the PIN.
       final shouldPrompt =
-          !linkApplied && (linkSwitches || hasNoActive || activeProfile.requiresSelectionOnOpen(settings));
+          !linkApplied &&
+          !autoLocked &&
+          (linkSwitches || autoLockProfile != null || hasNoActive || activeProfile.requiresSelectionOnOpen(settings));
 
       var bindingSucceeded = activeProfile.lastBindingSucceeded;
       if (shouldPrompt) {
@@ -2380,7 +2405,7 @@ class _SetupScreenState extends State<SetupScreen> with MountedSetStateMixin {
         ).push(MaterialPageRoute(builder: (_) => const ProfileSwitchScreen(requireSelection: true)));
         if (!mounted) return;
         bindingSucceeded = activeProfile.active != null && activeProfile.lastBindingSucceeded;
-      } else if (!linkSwitches) {
+      } else if (!linkSwitches && !autoLocked) {
         // Now wait for the binder to settle. This is the media-server client
         // race: per-server status flips on the splash list as each client comes
         // online, and we don't push MainScreen until they're all done (success
@@ -2412,7 +2437,7 @@ class _SetupScreenState extends State<SetupScreen> with MountedSetStateMixin {
       unawaited(
         Navigator.pushReplacement(
           context,
-          fadeRoute(ProfileSessionScreen(initialPromptHandled: shouldPrompt || linkApplied)),
+          fadeRoute(ProfileSessionScreen(initialPromptHandled: shouldPrompt || linkApplied || autoLocked)),
         ),
       );
     } finally {
@@ -2573,4 +2598,18 @@ class _SetupScreenState extends State<SetupScreen> with MountedSetStateMixin {
       ),
     );
   }
+}
+
+/// Local patch (auto-lock): the cold-start decision, made once per process so
+/// the binder's deferral and SetupScreen's switch always agree, even after the
+/// persisted backgrounded time has been cleared.
+Future<Profile?>? _startupAutoLockDecision;
+
+Future<Profile?> _startupAutoLockProfile(ActiveProfileProvider activeProfile) {
+  return _startupAutoLockDecision ??= () async {
+    final fallback = autoLockFallbackProfile(activeProfile.profiles, activeProfile.active);
+    if (fallback == null) return null;
+    final storage = await StorageService.getInstance();
+    return autoLockGraceExpired(readAutoLockBackgroundedAt(storage), DateTime.now()) ? fallback : null;
+  }();
 }
