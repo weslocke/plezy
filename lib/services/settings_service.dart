@@ -874,6 +874,11 @@ class SettingsService extends BaseSharedPreferencesService {
   /// at all. UI-only: catalog sources stay connected so watchlist surfaces
   /// keep working while the tab is hidden.
   static const showExploreTab = BoolPref('show_explore_tab', defaultValue: true);
+
+  /// Local patch (not upstream): app-wide switch for downloads. Off hides every
+  /// download entry point and stops new downloads; see
+  /// `lib/services/downloads_switch.dart`.
+  static const showDownloads = BoolPref('local_patch_show_downloads', defaultValue: true);
   static const alwaysKeepSidebarOpen = BoolPref('always_keep_sidebar_open');
 
   /// Sidebar Libraries section expansion. Persisted so a collapsed section
@@ -1539,6 +1544,7 @@ class SettingsService extends BaseSharedPreferencesService {
     useExoPlayer,
     startupSection,
     showExploreTab,
+    showDownloads,
     alwaysKeepSidebarOpen,
     librariesSectionExpanded,
     showUnwatchedCount,

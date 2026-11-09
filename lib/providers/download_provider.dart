@@ -20,6 +20,7 @@ import '../services/download_manager_service.dart';
 import '../services/api_cache.dart';
 import '../services/download_artwork_service.dart';
 import '../services/download_storage_service.dart';
+import '../services/downloads_switch.dart';
 import '../services/downloaded_video_source.dart';
 import '../services/multi_server_manager.dart';
 import '../services/offline_mode_source.dart';
@@ -2250,6 +2251,8 @@ class DownloadProvider extends ChangeNotifier with DisposableChangeNotifierMixin
   /// Call after a [MediaServerClient] becomes available (e.g. after server connect on launch).
   void resumeQueuedDownloads(MediaServerClient client) {
     if (!_downloadManager.downloadsSupported) return;
+    // Local patch: downloads turned off in settings stay queued, not resumed.
+    if (!downloadsEnabled()) return;
     _downloadManager.resumeQueuedDownloads(client);
   }
 
@@ -2752,6 +2755,8 @@ class DownloadProvider extends ChangeNotifier with DisposableChangeNotifierMixin
   /// Returns titles of newly queued items (for snackbar display).
   Future<List<String>> executeSyncRules(MultiServerManager serverManager, {bool force = false}) async {
     if (!_downloadManager.downloadsSupported) return [];
+    // Local patch: no sync-rule downloads while downloads are turned off.
+    if (!downloadsEnabled()) return [];
     if (_syncRuleCleanupInProgress) return [];
 
     final profileId = _activeProfileId;
@@ -2792,6 +2797,7 @@ class DownloadProvider extends ChangeNotifier with DisposableChangeNotifierMixin
   /// `addToCollection`). Bypasses the cooldown.
   Future<SyncRuleResult?> executeSyncRuleFor(String globalKey, MultiServerManager serverManager) async {
     if (!_downloadManager.downloadsSupported) return null;
+    if (!downloadsEnabled()) return null;
     if (_syncRuleCleanupInProgress) return null;
 
     final profileId = _activeProfileId;

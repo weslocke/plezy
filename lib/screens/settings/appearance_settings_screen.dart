@@ -142,6 +142,16 @@ class AppearanceSettingsScreen extends StatelessWidget {
                 title: t.settings.showExploreTab,
                 subtitle: t.settings.showExploreTabDescription,
               ),
+            // Local patch (not upstream): see lib/services/downloads_switch.dart.
+            if (!PlatformDetector.isAppleTV())
+              const SettingSwitchTile(
+                pref: SettingsService.showDownloads,
+                icon: Symbols.download_rounded,
+                title: 'Downloads',
+                subtitle:
+                    'Show Downloads in the sidebar, on media pages and in menus. When off, nothing new '
+                    'is downloaded; downloads already on this device are kept.',
+              ),
             if (PlatformDetector.shouldUseSideNavigation(context))
               SettingSwitchTile(
                 pref: SettingsService.alwaysKeepSidebarOpen,

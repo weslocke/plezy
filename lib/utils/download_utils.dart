@@ -14,13 +14,13 @@ import '../providers/download_provider.dart';
 import '../providers/multi_server_provider.dart';
 import '../services/playlist_items_loader.dart';
 import '../services/settings_service.dart';
+import '../services/downloads_switch.dart';
 import '../services/sync_rule_executor.dart';
 import '../widgets/background_download_warning_banner.dart';
 import 'app_logger.dart';
 import 'content_utils.dart';
 import 'dialogs.dart';
 import 'download_version_utils.dart';
-import 'platform_detector.dart';
 import 'snackbar_helper.dart';
 import '../utils/error_message_utils.dart';
 
@@ -601,7 +601,7 @@ List<FocusableAction> buildSyncRuleActions(
   required bool showDownload,
   required VoidCallback onDownload,
 }) {
-  if (PlatformDetector.isAppleTV()) return const [];
+  if (!downloadsEnabled()) return const [];
   return [
     if (showDownload)
       FocusableAction(
