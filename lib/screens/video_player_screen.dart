@@ -2003,6 +2003,7 @@ class VideoPlayerScreenState extends State<VideoPlayerScreen>
         ('sub-ass-override', settingsService.read(SettingsService.subAssOverride).name),
         ('sub-ass-video-aspect-override', '1'),
         ('sub-pos', settingsService.read(SettingsService.subtitlePosition).toString()),
+        ('ass-scale-with-window', 'yes'),
       ]) {
         try {
           await currentPlayer.setProperty(name, value);
