@@ -1,5 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plezy/navigation/navigation_tabs.dart';
+import 'package:plezy/services/downloads_switch.dart';
+import 'package:plezy/services/settings_service.dart';
+
+import '../test_helpers/prefs.dart';
 
 void main() {
   group('NavigationTab.resolveDefaultTab', () {
@@ -75,6 +79,38 @@ void main() {
     test('Explore is online-only', () {
       final offline = NavigationTab.getVisibleTabs(isOffline: true, hasExplore: true);
       expect(offline.map((tab) => tab.id), isNot(contains(NavigationTabId.explore)));
+    });
+  });
+
+  // Local patch: the app-wide downloads switch (lib/services/downloads_switch.dart).
+  group('downloads switch', () {
+    setUp(resetSharedPreferencesForTest);
+
+    bool hasDownloadsTab({required bool isOffline}) =>
+        NavigationTab.getVisibleTabs(isOffline: isOffline).any((t) => t.id == NavigationTabId.downloads);
+
+    test('downloads are on by default', () async {
+      await SettingsService.getInstance();
+      expect(downloadsEnabled(), isTrue);
+      expect(hasDownloadsTab(isOffline: false), isTrue);
+      expect(hasDownloadsTab(isOffline: true), isTrue);
+    });
+
+    test('turning downloads off removes the Downloads tab', () async {
+      final settings = await SettingsService.getInstance();
+      await settings.write(SettingsService.showDownloads, false);
+      expect(downloadsEnabled(), isFalse);
+      expect(hasDownloadsTab(isOffline: false), isFalse);
+      expect(hasDownloadsTab(isOffline: true), isFalse);
+    });
+
+    test('offline without downloads opens Settings instead of Downloads', () async {
+      final settings = await SettingsService.getInstance();
+      await settings.write(SettingsService.showDownloads, false);
+      expect(
+        NavigationTab.resolveDefaultTab(isOffline: true, hasLiveTv: false, preferredStartup: NavigationTabId.downloads),
+        NavigationTabId.settings,
+      );
     });
   });
 }

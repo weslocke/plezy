@@ -439,6 +439,7 @@ class _MainScreenState extends State<MainScreen>
   MultiServerProvider? _multiServerProvider;
   CatalogSourcesProvider? _catalogSourcesProvider;
   ValueListenable<bool>? _showExploreTabListenable;
+  ValueListenable<bool>? _showDownloadsListenable; // local patch
   RouteObserver<PageRoute<dynamic>>? _profileRouteObserver;
   bool _lastHasLiveTv = false;
   bool _lastHasExplore = false;
@@ -575,6 +576,9 @@ class _MainScreenState extends State<MainScreen>
     // mid-session; the catalog-sources listener covers source changes.
     _showExploreTabListenable = SettingsService.instanceOrNull?.listenable(SettingsService.showExploreTab);
     _showExploreTabListenable?.addListener(_handleCatalogSourcesChanged);
+    // Local patch: the Downloads tab comes and goes with the downloads switch.
+    _showDownloadsListenable = SettingsService.instanceOrNull?.listenable(SettingsService.showDownloads);
+    _showDownloadsListenable?.addListener(_handleTabAvailabilityChanged);
     _currentTab = _defaultTabForMode(_isOffline);
     _lastOnlineTabId = _isOffline ? null : NavigationTabId.discover;
     _autoSwitchedToDownloads = _isOffline && _currentTab == NavigationTabId.downloads;
@@ -1076,6 +1080,7 @@ class _MainScreenState extends State<MainScreen>
     _multiServerProvider?.removeListener(_handleLiveTvChanged);
     _catalogSourcesProvider?.removeListener(_handleCatalogSourcesChanged);
     _showExploreTabListenable?.removeListener(_handleCatalogSourcesChanged);
+    _showDownloadsListenable?.removeListener(_handleTabAvailabilityChanged);
     if (_bindingSettleListener != null) {
       _activeProfileForListener?.removeListener(_bindingSettleListener!);
     }

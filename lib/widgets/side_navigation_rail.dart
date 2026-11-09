@@ -22,6 +22,7 @@ import '../providers/libraries_provider.dart';
 import '../services/device_performance.dart';
 import '../services/music/music_playback_service.dart';
 import '../services/settings_service.dart';
+import '../services/downloads_switch.dart';
 import '../utils/music_navigation.dart';
 import '../utils/content_utils.dart';
 import '../utils/platform_detector.dart';
@@ -498,7 +499,7 @@ class SideNavigationRailState extends State<SideNavigationRail> with MountedSetS
   /// focus-expanded — displaces content instead and stays transparent on TV.
   bool get _isFloatingPanel => _interactionExpanded && !widget.alwaysExpanded;
 
-  bool get _showDownloads => !PlatformDetector.isAppleTV();
+  bool get _showDownloads => downloadsEnabled();
 
   /// macOS has the system green button; mobile/TV have no OS fullscreen toggle.
   bool get _showFullscreenToggle => Platform.isWindows || Platform.isLinux;
@@ -899,6 +900,7 @@ class SideNavigationRailState extends State<SideNavigationRail> with MountedSetS
         FullscreenStateManager(),
         SettingsService.instance.listenable(SettingsService.groupLibrariesByServer),
         SettingsService.instance.listenable(SettingsService.showExploreTab),
+        SettingsService.instance.listenable(SettingsService.showDownloads),
         SettingsService.instance.listenable(SettingsService.librariesSectionExpanded),
       ]),
       builder: (context, _) {

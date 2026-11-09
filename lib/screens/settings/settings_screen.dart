@@ -228,7 +228,12 @@ class _SettingsScreenState extends State<SettingsScreen> with FocusableTab, Moun
 
                   _buildConnectionsSection(sheetContext),
 
-                  if (!PlatformDetector.isAppleTV()) _buildDownloadsSection(),
+                  // Local patch: also hidden when downloads are turned off.
+                  if (!PlatformDetector.isAppleTV())
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _settingsService.listenable(settings.SettingsService.showDownloads),
+                      builder: (_, on, _) => on ? _buildDownloadsSection() : const SizedBox.shrink(),
+                    ),
 
                   if (_keyboardShortcutsSupported || PlatformDetector.shouldActAsRemoteHost(sheetContext))
                     _buildControlsSection(sheetContext),

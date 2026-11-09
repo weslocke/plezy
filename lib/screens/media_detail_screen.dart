@@ -58,6 +58,7 @@ import '../services/download_storage_service.dart';
 import '../utils/download_version_utils.dart';
 import '../utils/download_utils.dart';
 import '../services/settings_service.dart';
+import '../services/downloads_switch.dart';
 import '../services/watch_actions.dart';
 import '../widgets/settings_builder.dart';
 import '../utils/layout_constants.dart';
