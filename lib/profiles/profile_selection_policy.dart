@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 
 import '../services/settings_service.dart';
 import 'active_profile_provider.dart';
+import 'profile_auto_lock.dart';
 
 extension ProfileSelectionPolicy on ActiveProfileProvider {
   /// The "ask for a profile every time the app opens" rule: the pref only bites
@@ -24,6 +25,9 @@ extension ProfileSelectionPolicy on ActiveProfileProvider {
   bool mayPublishToSystemShelf(String profileId, SettingsService settings) {
     final profile = profiles.firstWhereOrNull((p) => p.id == profileId);
     if (profile == null) return false;
-    return !profile.isPinProtected || !requiresSelectionOnOpen(settings);
+    // Local patch (auto-lock): a protected profile with an unlocked profile to
+    // drop to is off the shelf too, see [autoLockKeepsProfileOffShelf].
+    return !profile.isPinProtected ||
+        (!requiresSelectionOnOpen(settings) && !autoLockKeepsProfileOffShelf(profiles, profile));
   }
 }

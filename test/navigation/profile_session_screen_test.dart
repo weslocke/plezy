@@ -198,12 +198,13 @@ void main() {
     expect(shelf.debugActiveOwner, isNull);
     expect(calls, [('clear', owner.id)]);
 
-    // Without the open-time picker the app reopens straight into the profile,
-    // so the shelf shows nothing more; Discover republishes on admission.
+    // Local patch (auto-lock): without the open-time picker, auto-lock still
+    // drops back to Kids, so the protected profile stays off the shelf. (Upstream
+    // admits it here, since its app would reopen straight into the profile.)
     await settings.write(SettingsService.requireProfileSelectionOnOpen, false);
     await tester.pumpAndSettle();
-    expect(shelf.debugActiveOwner, owner.id);
-    expect(calls.last, ('sync', owner.id));
+    expect(shelf.debugActiveOwner, isNull);
+    expect(calls.last, ('clear', owner.id));
 
     await settings.write(SettingsService.requireProfileSelectionOnOpen, true);
     await tester.pumpAndSettle();

@@ -32,6 +32,16 @@ Profile? autoLockFallbackProfile(List<Profile> profiles, Profile? active) {
   return null;
 }
 
+/// Whether auto-lock keeps [profile] off the launcher shelf (Android TV Watch
+/// Next, tvOS Top Shelf). Anyone at the TV sees the shelf without opening the
+/// app, and once auto-lock has a profile to drop to, coming back opens that
+/// one instead of [profile]: so a PIN-protected profile's Continue Watching
+/// must not be published either, the same rule upstream applies while
+/// "Require profile selection on open" is on. See
+/// `ProfileSelectionPolicy.mayPublishToSystemShelf`.
+bool autoLockKeepsProfileOffShelf(List<Profile> profiles, Profile profile) =>
+    autoLockFallbackProfile(profiles, profile) != null;
+
 /// Whether a protected profile should lock, given when Plezy left the
 /// foreground. A missing timestamp means Plezy never recorded leaving (a crash,
 /// a power cut, or the first launch with this patch), which locks.

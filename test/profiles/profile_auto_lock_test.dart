@@ -48,6 +48,24 @@ void main() {
     });
   });
 
+  group('autoLockKeepsProfileOffShelf', () {
+    test('a PIN-protected profile with an unlocked profile to drop to stays off', () {
+      final locked = _local('locked', pin: true);
+      expect(autoLockKeepsProfileOffShelf([locked, _local('kids')], locked), isTrue);
+    });
+
+    test('an unprotected profile may publish', () {
+      final open = _local('open');
+      expect(autoLockKeepsProfileOffShelf([_local('locked', pin: true), open], open), isFalse);
+    });
+
+    test('a protected profile with nowhere to drop to is left to upstream policy', () {
+      final locked = _local('locked', pin: true);
+      expect(autoLockKeepsProfileOffShelf([locked, _local('other', pin: true)], locked), isFalse);
+      expect(autoLockKeepsProfileOffShelf([locked], locked), isFalse);
+    });
+  });
+
   group('autoLockGraceExpired', () {
     final now = DateTime(2026, 11, 7, 12);
 
