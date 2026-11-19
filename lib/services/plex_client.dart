@@ -4326,6 +4326,12 @@ class PlexClient
     }
     if (filters.isEmpty) return const [];
 
+    // Local patch: the advanced-filter `Field` list leaves out some of the
+    // filters Plex Web offers in its plain filter dropdown, notably Labels
+    // and Edition. Those come only in the type's `Filter` list, in the same
+    // shape as the legacy `/filters` rows, so add the ones `Field` lacks.
+    _addDropdownOnlyFilters(filters, browsedType['Filter'], ownPrefix: ownPrefix);
+
     // Undocumented but supported on movie and episode queries: a substring
     // match over the item's full file path, which is the only way to filter
     // by filename or folder. A show-type query answers 500 for it, so it is
@@ -4345,6 +4351,31 @@ class PlexClient
       );
     }
     return filters;
+  }
+
+  /// Fields Plex Web lists in its dropdown that aren't filters: `folder` is
+  /// a folder browser there, not a value to match.
+  static const _dropdownOnlyFiltersSkipped = {'folder'};
+
+  /// Appends the `Meta.Type[].Filter[]` rows whose field [filters] does not
+  /// already cover (see [_parseFilterMetadata]). Only rows with a value list
+  /// are taken: they are the legacy `/filters` shape, which the editor already
+  /// handles, with Plezy's default operators for the declared type.
+  static void _addDropdownOnlyFilters(List<MediaFilter> filters, Object? dropdown, {required String ownPrefix}) {
+    if (dropdown is! List) return;
+    final covered = {for (final f in filters) f.filter.split('.').last};
+    for (final entry in dropdown.whereType<Map<String, dynamic>>()) {
+      final rawField = entry['filter'];
+      final title = entry['title'];
+      final key = entry['key'];
+      if (rawField is! String || rawField.isEmpty || title is! String || title.isEmpty) continue;
+      if (key is! String || key.isEmpty) continue;
+      final wireField = rawField.startsWith(ownPrefix) ? rawField.substring(ownPrefix.length) : rawField;
+      final bareField = wireField.split('.').last;
+      if (_dropdownOnlyFiltersSkipped.contains(bareField) || !covered.add(bareField)) continue;
+      final filterType = entry['filterType'] is String ? entry['filterType'] as String : MediaFilterType.string;
+      filters.add(MediaFilter(filter: wireField, filterType: filterType, key: key, title: title, type: 'filter'));
+    }
   }
 
   static LibraryFilterOperator? _plexOperatorFor(Object? key) => switch (key) {
