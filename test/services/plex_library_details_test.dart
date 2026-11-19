@@ -163,66 +163,30 @@ void main() {
       expect(fields, isNot(contains(MediaFilterField.file)));
     });
 
-    // Local patch: Labels and Edition are only in the dropdown `Filter` list.
-    test('adds dropdown filters the advanced field list leaves out, such as Labels', () async {
-      final payload = _metaPayload();
-      final movieType = ((payload['MediaContainer'] as Map)['Meta'] as Map)['Type'][0] as Map<String, dynamic>;
-      movieType['Filter'] = [
-        // Already a field: the field's richer definition wins.
-        {
-          'filter': 'genre',
-          'filterType': 'string',
-          'key': '/library/sections/1/genre',
-          'title': 'Genre',
-          'type': 'filter',
-        },
-        {
-          'filter': 'label',
-          'filterType': 'string',
-          'key': '/library/sections/1/label',
-          'title': 'Labels',
-          'type': 'filter',
-        },
-        {
-          'filter': 'editionTitle',
-          'filterType': 'string',
-          'key': '/library/sections/1/editionTitle',
-          'title': 'Edition',
-          'type': 'filter',
-        },
-        // A folder browser in Plex Web, not a filter.
-        {
-          'filter': 'folder',
-          'filterType': 'string',
-          'key': '/library/sections/1/folder',
-          'title': 'Folder Location',
-          'type': 'filter',
-        },
-        // Nothing to list: not offered.
-        {'filter': 'mystery', 'filterType': 'string', 'key': '', 'title': 'Mystery', 'type': 'filter'},
-      ];
+    // Local patch: PMS evaluates and lists labels but never publishes the field.
+    test('offers Labels, which the schema never lists, on movie and show sections', () async {
       final client = metaClient((request) async {
         if (request.url.path == '/library/sections/1/all') {
-          return http.Response(jsonEncode(payload), 200, headers: {'content-type': 'application/json'});
+          return http.Response(jsonEncode(_metaPayload()), 200, headers: {'content-type': 'application/json'});
+        }
+        if (request.url.path == '/library/sections/2/all') {
+          return http.Response(jsonEncode(_showMetaPayload()), 200, headers: {'content-type': 'application/json'});
         }
         return http.Response('not found', 404);
       });
       addTearDown(client.close);
 
-      final result = await client.fetchLibraryFiltersWithValues('1', libraryKind: MediaKind.movie);
-      final byField = {for (final filter in result.filters) filter.filter: filter};
+      final movies = await client.fetchLibraryFiltersWithValues('1', libraryKind: MediaKind.movie);
+      final label = movies.filters.singleWhere((f) => f.filter == 'label');
+      expect(label.title, 'Labels');
+      expect(label.key, '/library/sections/1/label?type=1');
+      expect(label.editorKind, FilterEditorKind.valueList);
+      expect(label.operators, [LibraryFilterOperator.is_, LibraryFilterOperator.isNot]);
+      // Added after the server's fields, before the file filter.
+      expect(movies.filters.last.filter, MediaFilterField.file);
 
-      expect(byField['label']!.title, 'Labels');
-      expect(byField['label']!.key, '/library/sections/1/label');
-      expect(byField['label']!.editorKind, FilterEditorKind.valueList);
-      expect(byField['label']!.supportsExclusion, isTrue);
-      expect(byField['editionTitle']!.title, 'Edition');
-      expect(byField['genre']!.key, '/library/sections/1/genre?type=1');
-      expect(result.filters.where((f) => f.filter == 'genre'), hasLength(1));
-      expect(byField.containsKey('folder'), isFalse);
-      expect(byField.containsKey('mystery'), isFalse);
-      // Fields, the dropdown additions, then the file filter.
-      expect(result.filters.last.filter, MediaFilterField.file);
+      final shows = await client.fetchLibraryFiltersWithValues('2', libraryKind: MediaKind.show);
+      expect(shows.filters.singleWhere((f) => f.filter == 'label').key, '/library/sections/2/label?type=2');
     });
 
     test('falls back to the legacy filter listing when the server publishes no schema', () async {

@@ -1316,6 +1316,7 @@
       "year": "Year",
       "contentRating": "Content Rating",
       "tag": "Tag",
+      "label": "Labels",
       "unwatched": "Unwatched",
       "unplayed": "Unplayed",
       "favorites": "Favorites",

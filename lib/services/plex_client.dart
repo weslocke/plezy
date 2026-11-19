@@ -4326,11 +4326,23 @@ class PlexClient
     }
     if (filters.isEmpty) return const [];
 
-    // Local patch: the advanced-filter `Field` list leaves out some of the
-    // filters Plex Web offers in its plain filter dropdown, notably Labels
-    // and Edition. Those come only in the type's `Filter` list, in the same
-    // shape as the legacy `/filters` rows, so add the ones `Field` lacks.
-    _addDropdownOnlyFilters(filters, browsedType['Filter'], ownPrefix: ownPrefix);
+    // Local patch: PMS never lists `label` in the section schema, neither in
+    // `Field` nor in the dropdown `Filter` list (checked against PMS with a
+    // labelled movie section), yet it evaluates `label=<id>`/`label!=<id>` and
+    // lists a section's labels at `/library/sections/{id}/label`. Plex Web
+    // offers Labels anyway, so it is added here like the file filter below.
+    if (_plexLabelledTypes.contains(typeId) && !filters.any((f) => f.filter.split('.').last == _plexLabelField)) {
+      filters.add(
+        MediaFilter(
+          filter: _plexLabelField,
+          filterType: MediaFilterType.tag,
+          key: _plexFilterValuesKey('tag', _plexLabelField, libraryId: libraryId, typeId: typeId),
+          title: t.libraries.filterCategories.label,
+          type: 'filter',
+          operators: const [LibraryFilterOperator.is_, LibraryFilterOperator.isNot],
+        ),
+      );
+    }
 
     // Undocumented but supported on movie and episode queries: a substring
     // match over the item's full file path, which is the only way to filter
@@ -4353,30 +4365,10 @@ class PlexClient
     return filters;
   }
 
-  /// Fields Plex Web lists in its dropdown that aren't filters: `folder` is
-  /// a folder browser there, not a value to match.
-  static const _dropdownOnlyFiltersSkipped = {'folder'};
+  static const _plexLabelField = 'label';
 
-  /// Appends the `Meta.Type[].Filter[]` rows whose field [filters] does not
-  /// already cover (see [_parseFilterMetadata]). Only rows with a value list
-  /// are taken: they are the legacy `/filters` shape, which the editor already
-  /// handles, with Plezy's default operators for the declared type.
-  static void _addDropdownOnlyFilters(List<MediaFilter> filters, Object? dropdown, {required String ownPrefix}) {
-    if (dropdown is! List) return;
-    final covered = {for (final f in filters) f.filter.split('.').last};
-    for (final entry in dropdown.whereType<Map<String, dynamic>>()) {
-      final rawField = entry['filter'];
-      final title = entry['title'];
-      final key = entry['key'];
-      if (rawField is! String || rawField.isEmpty || title is! String || title.isEmpty) continue;
-      if (key is! String || key.isEmpty) continue;
-      final wireField = rawField.startsWith(ownPrefix) ? rawField.substring(ownPrefix.length) : rawField;
-      final bareField = wireField.split('.').last;
-      if (_dropdownOnlyFiltersSkipped.contains(bareField) || !covered.add(bareField)) continue;
-      final filterType = entry['filterType'] is String ? entry['filterType'] as String : MediaFilterType.string;
-      filters.add(MediaFilter(filter: wireField, filterType: filterType, key: key, title: title, type: 'filter'));
-    }
-  }
+  /// Library types whose items carry Plex labels: movies, shows and artists.
+  static const _plexLabelledTypes = {PlexMetadataType.movie, PlexMetadataType.show, PlexMetadataType.artist};
 
   static LibraryFilterOperator? _plexOperatorFor(Object? key) => switch (key) {
     '=' => LibraryFilterOperator.is_,

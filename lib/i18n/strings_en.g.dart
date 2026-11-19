@@ -6808,6 +6808,9 @@ class Translations$libraries$filterCategories$en {
 	/// en: 'Tag'
 	String get tag => 'Tag';
 
+	/// en: 'Labels'
+	String get label => 'Labels';
+
 	/// en: 'Unwatched'
 	String get unwatched => 'Unwatched';
 
@@ -9349,6 +9352,7 @@ extension on Translations {
 			'libraries.filterCategories.year' => 'Year',
 			'libraries.filterCategories.contentRating' => 'Content Rating',
 			'libraries.filterCategories.tag' => 'Tag',
+			'libraries.filterCategories.label' => 'Labels',
 			'libraries.filterCategories.unwatched' => 'Unwatched',
 			'libraries.filterCategories.unplayed' => 'Unplayed',
 			'libraries.filterCategories.favorites' => 'Favorites',
@@ -9673,9 +9677,9 @@ extension on Translations {
 			'liveTv.recordingInProgress' => 'Recording now',
 			'liveTv.recordingsCount' => ({required Object count}) => '${count} scheduled',
 			'liveTv.editRule' => 'Edit rule',
-			'liveTv.editRuleAction' => 'Edit',
 			_ => null,
 		} ?? switch (path) {
+			'liveTv.editRuleAction' => 'Edit',
 			'liveTv.recordingRuleUpdated' => 'Recording rule updated',
 			'liveTv.guideReloadRequested' => 'Guide refresh requested',
 			'liveTv.guideReloadFailed' => 'Couldn\'t refresh the guide',
@@ -10187,9 +10191,9 @@ extension on Translations {
 			'performanceOverlay.maxLuma' => 'Max Luma',
 			'performanceOverlay.minLuma' => 'Min Luma',
 			'performanceOverlay.maxCll' => 'MaxCLL',
-			'performanceOverlay.maxFall' => 'MaxFALL',
 			_ => null,
 		} ?? switch (path) {
+			'performanceOverlay.maxFall' => 'MaxFALL',
 			'performanceOverlay.cacheUsed' => 'Cache Used',
 			'performanceOverlay.cacheLimit' => 'Cache Limit',
 			'performanceOverlay.speed' => 'Speed',
